@@ -1,27 +1,70 @@
-version: '3.8'
 services:
+  # --- BACKEND (Laravel) ---
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: my-web-project-backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app  # QUAN TRỌNG: Phải là /app (để khớp với Dockerfile trên)
+      - ./backend:/var/www/html
+    environment:
+      # Cấu hình cứng DB để đảm bảo Dev không cần sửa file .env
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=laravel_db
+      - DB_USERNAME=root
+      - DB_PASSWORD=root
     depends_on:
       - db
+    # ĐÂY LÀ DÒNG QUAN TRỌNG NHẤT:
+    # Tự động copy .env -> Cài thư viện -> Tạo Key -> Migrate DB -> Chạy Server
+    # Service Backend
+    command: >
+      sh -c "
+        cp -n .env.example .env || true &&
+        composer install &&
+        php artisan key:generate &&
+        echo 'Dang doi MySQL khoi dong (20s)...' &&
+        sleep 20 &&
+        php artisan migrate --force &&
+        php artisan serve --host=0.0.0.0 --port=8000
+      "
+
+  # --- FRONTEND (React) ---
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: my-web-project-frontend
+    restart: unless-stopped
     ports:
       - "3000:3000"
     volumes:
       - ./frontend:/app
+      # Dòng dưới này giúp giữ lại node_modules trong container không bị Windows ghi đè
       - /app/node_modules
     stdin_open: true
+    tty: true
+    # Tự động cài node_modules nếu thiếu
+    command: >
+      sh -c "npm install && npm start"
+
+  # --- DATABASE (MySQL 8 - Theo đúng đề bài) ---
   db:
     image: mysql:8.0
+    container_name: my-web-project-db
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: my_database
+      MYSQL_DATABASE: laravel_db
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
     volumes:
       - db_data:/var/lib/mysql
+
 volumes:
   db_data:
